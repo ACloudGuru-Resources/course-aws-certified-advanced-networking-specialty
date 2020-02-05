@@ -1,0 +1,126 @@
+Parameters:
+  VPCID:
+    Description: The ID of the VPC created.
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetsForCLB:
+    Description: The ID of the public subnet in Availiblity Zone A.
+    Type: List<AWS::EC2::Subnet::Id>
+  PrivateSubnetIdAWebserver:
+    Description: The ID of the private subnet in Availiblity Zone A - Web Server Tier.
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetIdADatabase:
+    Description: The ID of the private subnet in Availiblity Zone A - Database Tier.
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupIdCLB:
+    Description: Security Group used for CLB.
+    Type: AWS::EC2::SecurityGroup::Id
+  SecurityGroupIdWebserver:
+    Description: Security Group used for Application Servers.
+    Type: AWS::EC2::SecurityGroup::Id
+  SecurityGroupIdDatabase:
+    Description: Security Group used for Database Servers.
+    Type: AWS::EC2::SecurityGroup::Id
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0b898040803850657
+Resources:
+  LnEC2InstanceWS:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance'] ]
+      SecurityGroupIds:
+        - !Ref SecurityGroupIdWebserver
+      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdAWebserver] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "config"
+        config: 
+          packages: 
+            yum: 
+              httpd: []
+          files:
+              "/var/www/html/index.html":
+                content: !Join [ "", [ 
+                    "<html>\n",
+                      "<body>\n",
+                        "<h1> Hello, World!</h1>\n",
+                      "</body>\n",
+                    "</html>\n" ] ]
+                mode: "000644"
+                owner: "root"
+                group: "root"
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: "true"
+                ensureRunning: "true"
+  LnEC2InstanceDB:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - !Ref SecurityGroupIdDatabase
+      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdADatabase] ]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'database', 'instance'] ]
+  LnCLB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Instances:
+      - Ref: LnEC2InstanceWS
+      Listeners: 
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      LoadBalancerName: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec', 'lab'] ]
+      SecurityGroups: 
+        - !Ref SecurityGroupIdCLB
+      Subnets: !Ref PublicSubnetsForCLB
+      Tags:
+          - Key: Name
+            Value: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec', 'lab'] ]
+  LnWaitForAppServer:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn
+    Properties: 
+      Count: Integer
+      Handle: String
+      Timeout: String
+Outputs:
+  CLBLink:
+    Description: Public link to CLB
+    Value: !Sub 'http://${LnCLB.DNSName}'
