@@ -157,7 +157,7 @@ Resources:
       Tags: 
         - Key: Name
           Value: !Sub '${AWS::StackName}-NAT-gateway-a'
-  LnreateNatGatewayB:
+  LnCreateNatGatewayB:
     Type: AWS::EC2::NatGateway
     Properties: 
       AllocationId: !GetAtt LnElasticIPForNatB.AllocationId
@@ -223,31 +223,32 @@ Resources:
       RouteTableId: !Ref LnPublicRouteTableCLBB
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref LnInternetGateway
+  
+  # Add NAT gateway routes to route tables
   LnAddNATRoutingRuleWebserverA:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref LnPrivateRouteTableWebserverA
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref LnCreateNatGatewayA
+      NatGatewayId: !Ref LnCreateNatGatewayA
   LnAddNATRoutingRuleWebserverB:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref LnPrivateRouteTableWebserverB
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref LnInternetGateway
-
+      NatGatewayId: !Ref LnCreateNatGatewayB
   LnAddNATRoutingRuleDatabaseA:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref LnPrivateRouteTableDatabaseA
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref LnCreateNatGatewayA
-  LnAddNATRoutingRuleDatabaseA:
+      NatGatewayId: !Ref LnCreateNatGatewayA
+  LnAddNATRoutingRuleDatabaseB:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref LnPrivateRouteTableDatabaseB
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref LnInternetGateway
+      NatGatewayId: !Ref LnCreateNatGatewayB
   
   # Make subnet association with route tables
   LnAssociatePublicSubnetAWithRouteTable:
