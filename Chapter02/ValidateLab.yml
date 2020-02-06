@@ -106,7 +106,7 @@ Resources:
                     "$password = \"acloudguru\";\n",
                     "$conn = new mysqli($servername, $username, $password);\n",
                     "if ($conn->connect_error) { die(\"Connection failed: \" . $conn->connect_error); }\n",
-                    "echo \"<html><body><h1><center> Connection to RDS instance is successful. Congrats on successfully setting up the hands-on lab! Keep being awesome! </center></h1></body></html>\";\n",
+                    "echo \"<html><body><span style=\"padding-top: 200px;\"></span><img src=\"https://raw.githubusercontent.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty/master/Chapter02/acloudguru.jpg\" style=\"max-width: 400px; display: block; margin-left: auto; margin-right: auto; width: 50%;\"/><span style=\"padding-top: 200px;\"></span><h1><center> Connection to RDS instance is successful. Congrats on successfully setting up the hands-on lab! Keep being awesome! </center></h1></body></html>\";\n",
                     "?>\n" ] ]
                 mode: "000644"
                 owner: "root"
