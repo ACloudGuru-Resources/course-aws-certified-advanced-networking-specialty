@@ -1,141 +1,282 @@
-Parameters:
-  # VPCID:
-  #   Description: The ID of the VPC created.
-  #   Type: AWS::EC2::VPC::Id
-  PublicSubnetsForCLB:
-    Description: The ID of the public subnets for Classic Load Balancer.
-    Type: List<AWS::EC2::Subnet::Id>
-  # PrivateSubnetIdAWebserver:
-  #   Description: The ID of the private subnet in Availiblity Zone A - Web Server Tier.
-  #   Type: AWS::EC2::Subnet::Id
-  PrivateSubnetIdADatabase:
-    Description: The ID of the private subnet in Availiblity Zone A - Database Tier.
-    Type: AWS::EC2::Subnet::Id
-  PrivateSubnetIdBWebserver:
-    Description: The ID of the private subnet in Availiblity Zone B - Web Server Tier.
-    Type: AWS::EC2::Subnet::Id
-  PrivateSubnetIdBDatabase:
-    Description: The ID of the private subnet in Availiblity Zone B - Database Tier.
-    Type: AWS::EC2::Subnet::Id
-  SecurityGroupIdCLB:
-    Description: Security Group used for CLB.
-    Type: AWS::EC2::SecurityGroup::Id
-  SecurityGroupIdWebserver:
-    Description: Security Group used for Application Servers.
-    Type: AWS::EC2::SecurityGroup::Id
-  SecurityGroupIdDatabase:
-    Description: Security Group used for Database Servers.
-    Type: AWS::EC2::SecurityGroup::Id
-Mappings:
-  RegionMap:
-    us-east-1:
-      AMI: ami-0b898040803850657
 Resources:
-  LnRDSSubnetGroupName:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: RDS subnets for MultiAZ setup.
-      DBSubnetGroupName: RDSACGDatabaseSubnetGroup
-      SubnetIds: 
-        - !Ref PrivateSubnetIdBDatabase
-        - !Ref PrivateSubnetIdADatabase
-  LnRDSMySQLMasterDB:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      DBName: RDSACGDatabase
-      Engine: MySQL
-      AllocatedStorage: '50'
-      DBInstanceClass: db.m5.large
-      MasterUsername: root
-      MasterUserPassword: acloudguru
-      MultiAZ: 'true'
+  # Create the VPC
+  LnCustomVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: '10.0.0.0/16'
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'rds'] ]
-      VPCSecurityGroups: 
-      - !Ref SecurityGroupIdDatabase
-      DBSubnetGroupName: !Ref LnRDSSubnetGroupName
-    DeletionPolicy: Delete 
-  LnEC2InstanceWS2:
-    Type: AWS::EC2::Instance
+          Value: !Sub '${AWS::StackName}-custom-vpc-acg-lab'
+  
+  # Create each of the subnet
+  LnPublicSubnetA:
+    Type: AWS::EC2::Subnet
     Properties:
-      InstanceType: t2.micro
-      ImageId:
-        Fn::FindInMap:
-        - RegionMap
-        - !Ref AWS::Region
-        - AMI
+      CidrBlock: '10.0.0.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs ]
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2'] ]
-      SecurityGroupIds:
-        - !Ref SecurityGroupIdWebserver
-      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdBWebserver] ]
-      UserData:
-        Fn::Base64:
-          !Join [ "", [
-            "#!/bin/bash -xe\n",
-            "yum update -y\n",
-            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
-            !Sub "--stack ${AWS::StackName} ",
-            "--resource LnEC2InstanceWS2 ",
-            "--configsets InstallAndConfigure ",
-            !Sub "--region ${AWS::Region}",
-            "\n"] ]
-    Metadata:
-      AWS::CloudFormation::Init:
-        configSets: 
-          InstallAndConfigure:
-            - "config"
-        config: 
-          packages: 
-            yum: 
-              httpd: []
-              php: []
-              php-mysql: []
-          files:
-              "/var/www/html/index.php":
-                content: !Join [ "", [ 
-                    "<?php\n",
-                    "$servername = \"", !Sub '${LnRDSMySQLMasterDB.Endpoint.Address}', "\";\n",
-                    "$username = \"root\";\n",
-                    "$password = \"acloudguru\";\n",
-                    "$conn = new mysqli($servername, $username, $password);\n",
-                    "if ($conn->connect_error) { die(\"Connection failed: \" . $conn->connect_error); }\n",
-                    "echo \"Connected successfully\";\n",
-                    "?>\n" ] ]
-                mode: "000644"
-                owner: "root"
-                group: "root"
-          services: 
-            sysvinit: 
-              httpd: 
-                enabled: "true"
-                ensureRunning: "true"
-  LnCLB:
-    Type: AWS::ElasticLoadBalancing::LoadBalancer
+          Value: !Sub '${AWS::StackName}-public-subnet-clb-a'
+      VpcId: !Ref LnCustomVPC
+  LnPublicSubnetB:
+    Type: AWS::EC2::Subnet
     Properties:
-      Instances:
-      # - Ref: LnEC2InstanceWS1
-      - Ref: LnEC2InstanceWS2
-      Listeners: 
-      - LoadBalancerPort: '80'
-        InstancePort: '80'
-        Protocol: HTTP
-      HealthCheck:
-        Target: HTTP:80/
-        HealthyThreshold: '3'
-        UnhealthyThreshold: '5'
-        Interval: '30'
-        Timeout: '5'
-      LoadBalancerName: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec'] ]
-      SecurityGroups: 
-        - !Ref SecurityGroupIdCLB
-      Subnets: !Ref PublicSubnetsForCLB
+      CidrBlock: '10.0.8.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs ]
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec'] ]
-Outputs:
-  CLBLink:
-    Description: Public link to CLB
-    Value: !Sub 'http://${LnCLB.DNSName}'
+          Value: !Sub '${AWS::StackName}-public-subnet-clb-b'
+      VpcId: !Ref LnCustomVPC
+  LnPrivateWebserverSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '10.0.1.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-subnet-webserver-a'
+      VpcId: !Ref LnCustomVPC
+  LnPrivateWebserverSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '10.0.9.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-subnet-webserver-b'
+      VpcId: !Ref LnCustomVPC
+  LnPrivateDatabaseSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '10.0.2.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-subnet-database-a'
+      VpcId: !Ref LnCustomVPC
+  LnPrivateDatabaseSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '10.0.10.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-subnet-database-b'
+      VpcId: !Ref LnCustomVPC
+  
+  # Create each of the security groups
+  LnSecurityGroupForCLB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group created with CF template for LnSecurityGroupForCLB.
+      VpcId : !Ref LnCustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-classic-load-balancer-sg'
+        - Key: Description
+          Value: !Sub 'Security Group created for Classic Load Balancer with ${AWS::StackName}.'
+  LnSecurityGroupWebservers:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security Group created with CF template for with ${AWS::StackName}'
+      VpcId : !Ref LnCustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref LnSecurityGroupForCLB
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-webserver-sg'
+        - Key: Description
+          Value: !Sub 'Security Group created for Webservers with ${AWS::StackName}.'
+  LnSecurityGroupRDSDatabase:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group created for LnSecurityGroupRDSDatabase.
+      VpcId : !Ref LnCustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        SourceSecurityGroupId: !Ref LnSecurityGroupWebservers
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-database-sg'
+        - Key: Description
+          Value: !Sub 'Security Group created for RDS database with ${AWS::StackName}.'
+  
+  # Create Internet gateway
+  LnInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-internet-gateway'
+  
+  # Attach IGW
+  LnAttachIGWtoVPC:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref LnInternetGateway
+      VpcId: !Ref LnCustomVPC
+  
+  # Create Elastic IP addresses
+  LnElasticIPForNatA:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EIP-NAT-gateway-a'
+  LnElasticIPForNatB:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EIP-NAT-gateway-b'
+
+  # Create NAT Gateways
+  LnCreateNatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt LnElasticIPForNatA.AllocationId
+      SubnetId: !Ref LnPublicSubnetA
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT-gateway-a'
+  LnreateNatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt LnElasticIPForNatB.AllocationId
+      SubnetId: !Ref LnPublicSubnetB
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT-gateway-b'
+  
+  # Create all the routing tables
+  LnPublicRouteTableCLBA:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt-a'
+  LnPublicRouteTableCLBB:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt-b'
+  LnPrivateRouteTableWebserverA:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt-webserver-a'
+  LnPrivateRouteTableWebserverB:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt-webserver-b'
+  LnPrivateRouteTableDatabaseA:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt-database-a'
+  LnPrivateRouteTableDatabaseB:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt-database-b'
+  
+  # Add IGW to route to toure tables public traffic
+  LnAddIGWRoutingRuleA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPublicRouteTableCLBA
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+  LnAddIGWInternetRuleB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPublicRouteTableCLBB
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+  LnAddNATRoutingRuleWebserverA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPrivateRouteTableWebserverA
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnCreateNatGatewayA
+  LnAddNATRoutingRuleWebserverB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPrivateRouteTableWebserverB
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+
+  LnAddNATRoutingRuleDatabaseA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPrivateRouteTableDatabaseA
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnCreateNatGatewayA
+  LnAddNATRoutingRuleDatabaseA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPrivateRouteTableDatabaseB
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+  
+  # Make subnet association with route tables
+  LnAssociatePublicSubnetAWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPublicRouteTableCLBA
+      SubnetId: !Ref LnPublicSubnetA
+  LnAssociatePublicSubnetBWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPublicRouteTableCLBB
+      SubnetId: !Ref LnPublicSubnetB
+  LnAssociatePrivateWebserverASubnetWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPrivateRouteTableWebserverA
+      SubnetId: !Ref LnPrivateWebserverSubnetA
+  LnAssociatePrivateWebserverBSubnetWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPrivateRouteTableWebserverB
+      SubnetId: !Ref LnPrivateWebserverSubnetB
+  LnAssociatePrivateDatabaseASubnetWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPrivateRouteTableDatabaseA
+      SubnetId: !Ref LnPrivateDatabaseSubnetA
+  LnAssociatePrivateDatabaseBSubnetWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPrivateRouteTableDatabaseB
+      SubnetId: !Ref LnPrivateDatabaseSubnetB

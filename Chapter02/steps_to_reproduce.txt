@@ -1,0 +1,20 @@
+1) Create a VPC with /16 net mask
+    - custom-vpc-acg
+2) Create 6 subnets
+    - 3 in AZa (public-subnet-clb-a, public-subnet-webserver-a, public-subnet-database-a)
+    - 3 in AZb (public-subnet-clb-b, public-subnet-webserver-b, public-subnet-database-b)
+    - Each should have CIDR range of /24
+3) Create 6 route tables.
+    - 
+4) Assign each route table to each subnet.
+5) Create 3 Security groups
+    - SG1 -> For the CLB with Inbound rule of HTTP TCP 80 source from 0.0.0.0/0.
+    - SG2 -> For the Webservers with Inbound rule of HTTP TCP 80 source from SG1.
+    - SG3 -> For the RDS with Inbound rule of MySQL/Aurora TCP 3306 source from SG2.
+6) Create an IGW and attach it to the VPC.
+7) Create 2 Nat Gateways, one in each AZ.
+8) Add entries to route tables:
+    - 2 entries of 0.0.0.0/0 to IGW in the Route Tables associated with the public subnets.
+    - 2 entries of 0.0.0.0/0 to Nat Gateway in AZa to the Route Tables associated with the subnets in AZa
+    - 2 entries of 0.0.0.0/0 to Nat Gateway in AZb to the Route Tables associated with the subnets in AZb
+
