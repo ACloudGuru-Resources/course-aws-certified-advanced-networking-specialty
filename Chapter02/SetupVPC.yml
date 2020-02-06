@@ -1,15 +1,21 @@
 Parameters:
-  VPCID:
-    Description: The ID of the VPC created.
-    Type: AWS::EC2::VPC::Id
+  # VPCID:
+  #   Description: The ID of the VPC created.
+  #   Type: AWS::EC2::VPC::Id
   PublicSubnetsForCLB:
-    Description: The ID of the public subnet in Availiblity Zone A.
+    Description: The ID of the public subnets for Classic Load Balancer.
     Type: List<AWS::EC2::Subnet::Id>
-  PrivateSubnetIdAWebserver:
-    Description: The ID of the private subnet in Availiblity Zone A - Web Server Tier.
-    Type: AWS::EC2::Subnet::Id
+  # PrivateSubnetIdAWebserver:
+  #   Description: The ID of the private subnet in Availiblity Zone A - Web Server Tier.
+  #   Type: AWS::EC2::Subnet::Id
   PrivateSubnetIdADatabase:
     Description: The ID of the private subnet in Availiblity Zone A - Database Tier.
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetIdBWebserver:
+    Description: The ID of the private subnet in Availiblity Zone B - Web Server Tier.
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetIdBDatabase:
+    Description: The ID of the private subnet in Availiblity Zone B - Database Tier.
     Type: AWS::EC2::Subnet::Id
   SecurityGroupIdCLB:
     Description: Security Group used for CLB.
@@ -25,7 +31,32 @@ Mappings:
     us-east-1:
       AMI: ami-0b898040803850657
 Resources:
-  LnEC2InstanceWS:
+  LnRDSSubnetGroupName:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS subnets for MultiAZ setup.
+      DBSubnetGroupName: RDSACGDatabaseSubnetGroup
+      SubnetIds: 
+        - !Ref PrivateSubnetIdBDatabase
+        - !Ref PrivateSubnetIdADatabase
+  LnRDSMySQLMasterDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: RDSACGDatabase
+      Engine: MySQL
+      AllocatedStorage: '50'
+      DBInstanceClass: db.m5.large
+      MasterUsername: root
+      MasterUserPassword: acloudguru
+      MultiAZ: 'true'
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'rds'] ]
+      VPCSecurityGroups: 
+      - !Ref SecurityGroupIdDatabase
+      DBSubnetGroupName: !Ref LnRDSSubnetGroupName
+    DeletionPolicy: Delete 
+  LnEC2InstanceWS2:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t2.micro
@@ -36,10 +67,10 @@ Resources:
         - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance'] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2'] ]
       SecurityGroupIds:
         - !Ref SecurityGroupIdWebserver
-      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdAWebserver] ]
+      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdBWebserver] ]
       UserData:
         Fn::Base64:
           !Join [ "", [
@@ -47,7 +78,7 @@ Resources:
             "yum update -y\n",
             "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
             !Sub "--stack ${AWS::StackName} ",
-            "--resource LnEC2InstanceWS ",
+            "--resource LnEC2InstanceWS2 ",
             "--configsets InstallAndConfigure ",
             !Sub "--region ${AWS::Region}",
             "\n"] ]
@@ -60,14 +91,19 @@ Resources:
           packages: 
             yum: 
               httpd: []
+              php: []
+              php-mysql: []
           files:
-              "/var/www/html/index.html":
+              "/var/www/html/index.php":
                 content: !Join [ "", [ 
-                    "<html>\n",
-                      "<body>\n",
-                        "<h1> Hello, World!</h1>\n",
-                      "</body>\n",
-                    "</html>\n" ] ]
+                    "<?php\n",
+                    "$servername = \"", !Sub '${LnRDSMySQLMasterDB.Endpoint.Address}', "\";\n",
+                    "$username = \"root\";\n",
+                    "$password = \"acloudguru\";\n",
+                    "$conn = new mysqli($servername, $username, $password);\n",
+                    "if ($conn->connect_error) { die(\"Connection failed: \" . $conn->connect_error); }\n",
+                    "echo \"Connected successfully\";\n",
+                    "?>\n" ] ]
                 mode: "000644"
                 owner: "root"
                 group: "root"
@@ -76,26 +112,12 @@ Resources:
               httpd: 
                 enabled: "true"
                 ensureRunning: "true"
-  LnEC2InstanceDB:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: t2.micro
-      ImageId:
-        Fn::FindInMap:
-        - RegionMap
-        - !Ref AWS::Region
-        - AMI
-      SecurityGroupIds:
-        - !Ref SecurityGroupIdDatabase
-      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdADatabase] ]
-      Tags:
-        - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'database', 'instance'] ]
   LnCLB:
     Type: AWS::ElasticLoadBalancing::LoadBalancer
     Properties:
       Instances:
-      - Ref: LnEC2InstanceWS
+      # - Ref: LnEC2InstanceWS1
+      - Ref: LnEC2InstanceWS2
       Listeners: 
       - LoadBalancerPort: '80'
         InstancePort: '80'
@@ -106,20 +128,13 @@ Resources:
         UnhealthyThreshold: '5'
         Interval: '30'
         Timeout: '5'
-      LoadBalancerName: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec', 'lab'] ]
+      LoadBalancerName: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec'] ]
       SecurityGroups: 
         - !Ref SecurityGroupIdCLB
       Subnets: !Ref PublicSubnetsForCLB
       Tags:
-          - Key: Name
-            Value: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec', 'lab'] ]
-  LnWaitForAppServer:
-    Type: AWS::CloudFormation::WaitCondition
-    DependsOn
-    Properties: 
-      Count: Integer
-      Handle: String
-      Timeout: String
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec'] ]
 Outputs:
   CLBLink:
     Description: Public link to CLB
