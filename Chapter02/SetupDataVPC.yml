@@ -10,7 +10,7 @@ Mappings:
     us-west-2:
       AMI: ami-01460aa81365561fe
 Resources:
-  # Create the VPC
+  # Create the VPC.
   LnDataVPC:
     Type: AWS::EC2::VPC
     Properties: 
@@ -21,19 +21,31 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-database-vpc-acg-lab'
   
-  # Create the management subnet
+  # Create the database tier subnet in AZ b.
   LnDataSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       CidrBlock: '196.168.0.0/24'
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 0, !GetAZs ]
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-database-subnet-a'
       VpcId: !Ref LnDataVPC
+  
+  # Create the database tier subnet in AZ b.
+  LnDataSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '196.168.1.0/24'
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-database-subnet-b'
+      VpcId: !Ref LnDataVPC
 
-  # Create each of the security groups
+  # Create the security group
   LnSecurityGroupForRDSInstance:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -49,23 +61,17 @@ Resources:
           Value: !Sub '${AWS::StackName}-rds-instance-sg'
         - Key: Description
           Value: !Sub 'Security Group created for RDS instance to allow access from peered VPC ${AWS::StackName}.'
-
-  # Create all the routing tables
-  LnDataSubnetRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties: 
-      VpcId: !Ref LnDataVPC
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-database-subnet-rt-a'
   
-  # Make subnet association with route table
-  LnAssociatePublicSubnetAWithRouteTable:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: 
-      RouteTableId: !Ref LnDataSubnetRouteTable
-      SubnetId: !Ref LnDataSubnetA
-  
+  # Create RDS Subnet Ground Name.
+  LnRDSSubnetGroupName:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS subnets for MultiAZ setup.
+      DBSubnetGroupName: !Join [ '-', [!Sub '${AWS::StackName}', 'db-subnet-group'] ]
+      SubnetIds: 
+        - !Ref LnDataSubnetA
+        - !Ref LnDataSubnetB
+  # Create RDS instance.
   LnRDSMySQLMasterDB:
     Type: AWS::RDS::DBInstance
     Properties:
@@ -75,13 +81,30 @@ Resources:
       DBInstanceClass: db.t2.micro
       MasterUsername: root
       MasterUserPassword: acloudguru
-      MultiAZ: false
+      MultiAZ: true
       Tags:
         - Key: Name
           Value: !Join [ '-', [!Sub '${AWS::StackName}', 'rds'] ]
       VPCSecurityGroups: 
       - !Ref LnSecurityGroupForRDSInstance
+      DBSubnetGroupName: !Ref LnRDSSubnetGroupName
     DeletionPolicy: Delete
+
+  # Create the route table.
+  LnDataSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnDataVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-database-subnet-rt-a'
+  
+  # Make subnet association with route table.
+  LnAssociatePublicSubnetAWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnDataSubnetRouteTable
+      SubnetId: !Ref LnDataSubnetA
 
 Outputs:
   RDSEndpoint:
