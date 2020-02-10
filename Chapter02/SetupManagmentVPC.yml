@@ -1,0 +1,162 @@
+Parameters:
+  RDSInstanceDNS:
+    Description: The DNS of the MySQL RDS instance created in Part 1.
+    Type: String
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-09d069a04349dc3cb
+    us-east-2:
+      AMI: ami-0d542ef84ec55d71c
+    us-west-1:
+      AMI: ami-04bc3da8f14823e88
+    us-west-2:
+      AMI: ami-01460aa81365561fe
+Resources:
+  # Create the VPC
+  LnManagmentVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: '196.168.0.0/16'
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-mng-vpc-acg-lab'
+  
+  # Create the management subnet
+  LnManagementSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '196.168.0.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-management-subnet-a'
+      VpcId: !Ref LnManagmentVPC
+
+  # Create each of the security groups
+  LnSecurityGroupForMngVPC:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group created with CF template for Management public subnet.
+      VpcId : !Ref LnManagmentVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-management-instance-tool-sg'
+        - Key: Description
+          Value: !Sub 'Security Group created fir BI management subnet to access peered VPC ${AWS::StackName}.'
+  
+  # Create IGW for subnet
+  LnInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-internet-gateway'
+
+  # Attach IGW to VPC
+  LnAttachIGWtoVPC:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref LnInternetGateway
+      VpcId: !Ref LnManagmentVPC
+
+  # Create all the routing tables
+  LnManagementRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnManagmentVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-management-rt-a'
+  
+  # Make subnet association with route table
+  LnAssociatePublicSubnetAWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnManagementRouteTable
+      SubnetId: !Ref LnManagementSubnetA
+  
+
+  # Add IGW to route to toure tables public traffic
+  LnAddIGWRoutingRule:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnManagementRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+  
+  # Launch BI Tools EC2 Instance
+  LnMngEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'bi', 'tool', 'instance'] ]
+      SecurityGroupIds:
+        - !Ref LnSecurityGroupForMngVPC
+      SubnetId: !Join [ ',', [!Ref LnManagementSubnetA] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnMngEC2Instance ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "config"
+        config: 
+          packages: 
+            yum: 
+              httpd: []
+              php: []
+              php-mysql: []
+          files:
+              "/var/www/html/index.php":
+                content: !Join [ "", [ 
+                    "<?php\n",
+                    "$servername = \"", !Ref RDSInstanceDNS, "\";\n",
+                    "$username = \"root\";\n",
+                    "$password = \"acloudguru\";\n",
+                    "$conn = new mysqli($servername, $username, $password);\n",
+                    "if ($conn->connect_error) { die(\"Connection failed: \" . $conn->connect_error); }\n",
+                    "echo \"<html><body><h1><center> Connection to RDS instance in peered VPC is successful. Congrats on successfully setting up the hands-on lab! Keep being awesome! </center></h1></body></html>\";\n",
+                    "?>\n" ] ]
+                mode: "000644"
+                owner: "root"
+                group: "root"
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+Outputs:
+  AccountID:
+    Description: Management VPC Account ID.
+    Value: !Sub '${AWS::AccountId}'
+  ManagmentVPCID:
+    Description: Management VPC ID.
+    Value: !Sub '${LnManagmentVPC}'
+  ManagmentBIEC2Instance:
+    Description: Management EC2 instanced for BI tools.
+    Value: !Sub '${LnMngEC2Instance.PublicDnsName}' 

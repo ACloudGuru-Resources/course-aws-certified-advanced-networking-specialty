@@ -4,6 +4,8 @@ Resources:
     Type: AWS::EC2::VPC
     Properties: 
       CidrBlock: '10.0.0.0/16'
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-custom-vpc-acg-lab'
@@ -195,21 +197,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-private-rt-webserver-b'
-  LnPrivateRouteTableDatabaseA:
-    Type: AWS::EC2::RouteTable
-    Properties: 
-      VpcId: !Ref LnCustomVPC
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-private-rt-database-a'
-  LnPrivateRouteTableDatabaseB:
-    Type: AWS::EC2::RouteTable
-    Properties: 
-      VpcId: !Ref LnCustomVPC
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-private-rt-database-b'
-  
   # Add IGW to route to toure tables public traffic
   LnAddIGWRoutingRuleA:
     Type: AWS::EC2::Route
@@ -281,3 +268,11 @@ Resources:
     Properties: 
       RouteTableId: !Ref LnPrivateRouteTableDatabaseB
       SubnetId: !Ref LnPrivateDatabaseSubnetB
+
+Outputs:
+  AccountID:
+    Description: Application VPC Account ID.
+    Value: !Sub '${AWS::AccountId}'
+  ManagmentVPCID:
+    Description: Application VPC ID.
+    Value: !Sub '${LnCustomVPC}'
