@@ -1,0 +1,89 @@
+# Part 2: Required for Lab completion.
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-09d069a04349dc3cb
+    us-east-2:
+      AMI: ami-0d542ef84ec55d71c
+    us-west-1:
+      AMI: ami-04bc3da8f14823e88
+    us-west-2:
+      AMI: ami-01460aa81365561fe
+Resources:
+  # Create the VPC
+  LnDataVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: '196.168.0.0/16'
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-database-vpc-acg-lab'
+  
+  # Create the management subnet
+  LnDataSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: '196.168.0.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-database-subnet-a'
+      VpcId: !Ref LnDataVPC
+
+  # Create each of the security groups
+  LnSecurityGroupForRDSInstance:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group created with CF template for database private subnet.
+      VpcId : !Ref LnDataVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: 196.168.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-rds-instance-sg'
+        - Key: Description
+          Value: !Sub 'Security Group created for RDS instance to allow access from peered VPC ${AWS::StackName}.'
+
+  # Create all the routing tables
+  LnDataSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnDataVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-database-subnet-rt-a'
+  
+  # Make subnet association with route table
+  LnAssociatePublicSubnetAWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnDataSubnetRouteTable
+      SubnetId: !Ref LnDataSubnetA
+  
+  LnRDSMySQLMasterDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: RDSACGDatabase
+      Engine: MySQL
+      AllocatedStorage: '50'
+      DBInstanceClass: db.t2.micro
+      MasterUsername: root
+      MasterUserPassword: acloudguru
+      MultiAZ: false
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'rds'] ]
+      VPCSecurityGroups: 
+      - !Ref LnSecurityGroupForRDSInstance
+    DeletionPolicy: Delete
+
+Outputs:
+  RDSEndpoint:
+    Description: RDS instance endpoint.
+    Value: !Sub '${LnRDSMySQLMasterDB.Endpoint.Address}'

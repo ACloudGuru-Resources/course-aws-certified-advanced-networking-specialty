@@ -1,3 +1,4 @@
+# Part 1: Required for Lab completion.
 Parameters:
   PublicSubnetsForCLB:
     Description: The ID of the public subnets for Classic Load Balancer.

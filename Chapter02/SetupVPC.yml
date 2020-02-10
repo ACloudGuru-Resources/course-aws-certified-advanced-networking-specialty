@@ -1,3 +1,4 @@
+# Only required for easy path.
 Resources:
   # Create the VPC
   LnCustomVPC:
