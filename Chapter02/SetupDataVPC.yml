@@ -19,7 +19,7 @@ Resources:
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-database-vpc-acg-lab'
+          Value: !Sub '${AWS::StackName}-database-vpc-acg'
   
   # Create the database tier subnet in AZ b.
   LnDataSubnetA:

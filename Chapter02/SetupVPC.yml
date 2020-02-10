@@ -9,7 +9,7 @@ Resources:
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-custom-vpc-acg-lab'
+          Value: !Sub '${AWS::StackName}-application-vpc-acg'
   
   # Create each of the subnet
   LnPublicSubnetA:
