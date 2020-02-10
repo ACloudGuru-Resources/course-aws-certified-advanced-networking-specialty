@@ -51,27 +51,7 @@ Resources:
         - Key: Name
           Value: !Sub '${AWS::StackName}-private-subnet-webserver-b'
       VpcId: !Ref LnCustomVPC
-  LnPrivateDatabaseSubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      CidrBlock: '10.0.2.0/24'
-      MapPublicIpOnLaunch: false
-      AvailabilityZone: !Select [ 0, !GetAZs ]
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-private-subnet-database-a'
-      VpcId: !Ref LnCustomVPC
-  LnPrivateDatabaseSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      CidrBlock: '10.0.10.0/24'
-      MapPublicIpOnLaunch: false
-      AvailabilityZone: !Select [ 1, !GetAZs ]
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-private-subnet-database-b'
-      VpcId: !Ref LnCustomVPC
-  
+
   # Create each of the security groups
   LnSecurityGroupForCLB:
     Type: AWS::EC2::SecurityGroup
@@ -103,22 +83,7 @@ Resources:
           Value: !Sub '${AWS::StackName}-webserver-sg'
         - Key: Description
           Value: !Sub 'Security Group created for Webservers with ${AWS::StackName}.'
-  LnSecurityGroupRDSDatabase:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group created for LnSecurityGroupRDSDatabase.
-      VpcId : !Ref LnCustomVPC
-      SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 3306
-        ToPort: 3306
-        SourceSecurityGroupId: !Ref LnSecurityGroupWebservers
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-database-sg'
-        - Key: Description
-          Value: !Sub 'Security Group created for RDS database with ${AWS::StackName}.'
-  
+
   # Create Internet gateway
   LnInternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -224,19 +189,7 @@ Resources:
       RouteTableId: !Ref LnPrivateRouteTableWebserverB
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref LnCreateNatGatewayB
-  LnAddNATRoutingRuleDatabaseA:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref LnPrivateRouteTableDatabaseA
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref LnCreateNatGatewayA
-  LnAddNATRoutingRuleDatabaseB:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref LnPrivateRouteTableDatabaseB
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref LnCreateNatGatewayB
-  
+
   # Make subnet association with route tables
   LnAssociatePublicSubnetAWithRouteTable:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -258,21 +211,11 @@ Resources:
     Properties: 
       RouteTableId: !Ref LnPrivateRouteTableWebserverB
       SubnetId: !Ref LnPrivateWebserverSubnetB
-  LnAssociatePrivateDatabaseASubnetWithRouteTable:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: 
-      RouteTableId: !Ref LnPrivateRouteTableDatabaseA
-      SubnetId: !Ref LnPrivateDatabaseSubnetA
-  LnAssociatePrivateDatabaseBSubnetWithRouteTable:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: 
-      RouteTableId: !Ref LnPrivateRouteTableDatabaseB
-      SubnetId: !Ref LnPrivateDatabaseSubnetB
 
 Outputs:
   AccountID:
     Description: Application VPC Account ID.
     Value: !Sub '${AWS::AccountId}'
-  ManagmentVPCID:
+  ApplicationVPCID:
     Description: Application VPC ID.
     Value: !Sub '${LnCustomVPC}'
