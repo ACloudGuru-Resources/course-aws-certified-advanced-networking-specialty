@@ -1,0 +1,171 @@
+# Part 2: Required for Lab completion.
+Parameters:
+  PublicSubnetsForCLB:
+    Description: The ID of the public subnets for Classic Load Balancer.
+    Type: List<AWS::EC2::Subnet::Id>
+  PrivateSubnetIdWebserverA:
+    Description: The ID of the private subnet in Availiblity Zone A - Webserver Tier.
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetIdWebserverB:
+    Description: The ID of the private subnet in Availiblity Zone B - Webserver Tier.
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupIdCLB:
+    Description: Security Group used for the Classic Load Balancer.
+    Type: AWS::EC2::SecurityGroup::Id
+  SecurityGroupIdWebserver:
+    Description: Security Group used for the webservers.
+    Type: AWS::EC2::SecurityGroup::Id
+  RDSEndpoint:
+    Description: RDS Endpoint
+    Type: String
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-09d069a04349dc3cb
+    us-east-2:
+      AMI: ami-0d542ef84ec55d71c
+    us-west-1:
+      AMI: ami-04bc3da8f14823e88
+    us-west-2:
+      AMI: ami-01460aa81365561fe
+Resources:
+  LnEC2InstanceWS1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1'] ]
+      SecurityGroupIds:
+        - !Ref SecurityGroupIdWebserver
+      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdWebserverA] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS1 ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "config"
+        config: 
+          packages: 
+            yum: 
+              httpd: []
+              php: []
+              php-mysql: []
+          files:
+              "/var/www/html/index.php":
+                content: !Join [ "", [ 
+                    "<?php\n",
+                    "$servername = \"", !Ref RDSEndpoint, "\";\n",
+                    "$username = \"root\";\n",
+                    "$password = \"acloudguru\";\n",
+                    "$conn = new mysqli($servername, $username, $password);\n",
+                    "if ($conn->connect_error) { die(\"Connection failed: \" . $conn->connect_error); }\n",
+                    "echo \"<html><body><h1><center>The connection to RDS instance through peered VPC is successful. Congrats on successfully setting up the hands-on lab! Keep being awesome!</center></h1></body></html>\";\n",
+                    "?>\n" ] ]
+                mode: "000644"
+                owner: "root"
+                group: "root"
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+  LnEC2InstanceWS2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2'] ]
+      SecurityGroupIds:
+        - !Ref SecurityGroupIdWebserver
+      SubnetId: !Join [ ',', [!Ref PrivateSubnetIdWebserverB] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS2 ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "config"
+        config: 
+          packages: 
+            yum: 
+              httpd: []
+              php: []
+              php-mysql: []
+          files:
+              "/var/www/html/index.php":
+                content: !Join [ "", [ 
+                    "<?php\n",
+                    "$servername = \"", !Ref RDSEndpoint, "\";\n",
+                    "$username = \"root\";\n",
+                    "$password = \"acloudguru\";\n",
+                    "$conn = new mysqli($servername, $username, $password);\n",
+                    "if ($conn->connect_error) { die(\"Connection failed: \" . $conn->connect_error); }\n",
+                    "echo \"<html><body><h1><center>The connection to RDS instance through peered VPC is successful. Congrats on successfully setting up the hands-on lab! Keep being awesome!</center></h1></body></html>\";\n",
+                    "?>\n" ] ]
+                mode: "000644"
+                owner: "root"
+                group: "root"
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+  LnCLB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      Instances:
+      - Ref: LnEC2InstanceWS1
+      - Ref: LnEC2InstanceWS2
+      Listeners: 
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '3'
+        UnhealthyThreshold: '5'
+        Interval: '30'
+        Timeout: '5'
+      CrossZone: true
+      LoadBalancerName: advnetspec-lab-clb
+      SecurityGroups: 
+        - !Ref SecurityGroupIdCLB
+      Subnets: !Ref PublicSubnetsForCLB
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'clb', 'advnetspec'] ]
+Outputs:
+  CLBLink:
+    Description: Public link to CLB.
+    Value: !Sub 'http://${LnCLB.DNSName}'

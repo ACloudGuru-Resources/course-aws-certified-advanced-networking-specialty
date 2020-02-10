@@ -51,11 +51,6 @@ Resources:
     Properties:
       GroupDescription: Security Group created with CF template for database private subnet.
       VpcId : !Ref LnDataVPC
-      SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 3306
-        ToPort: 3306
-        CidrIp: 196.168.0.0/16
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-rds-instance-sg'
@@ -100,13 +95,25 @@ Resources:
           Value: !Sub '${AWS::StackName}-database-subnet-rt-a'
   
   # Make subnet association with route table.
-  LnAssociatePublicSubnetAWithRouteTable:
+  LnAssociatePublicSubnetAWithRouteTableA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties: 
       RouteTableId: !Ref LnDataSubnetRouteTable
       SubnetId: !Ref LnDataSubnetA
+  
+  LnAssociatePublicSubnetAWithRouteTableB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnDataSubnetRouteTable
+      SubnetId: !Ref LnDataSubnetB
 
 Outputs:
   RDSEndpoint:
     Description: RDS instance endpoint.
     Value: !Sub '${LnRDSMySQLMasterDB.Endpoint.Address}'
+  AccountID:
+    Description: Application VPC Account ID.
+    Value: !Sub '${AWS::AccountId}'
+  ApplicationVPCID:
+    Description: Data VPC ID.
+    Value: !Sub '${LnDataVPC}'

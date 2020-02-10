@@ -134,6 +134,7 @@ Resources:
         UnhealthyThreshold: '5'
         Interval: '30'
         Timeout: '5'
+      CrossZone: true
       LoadBalancerName: advnetspec-lab-clb
       SecurityGroups: 
         - !Ref SecurityGroupIdCLB
