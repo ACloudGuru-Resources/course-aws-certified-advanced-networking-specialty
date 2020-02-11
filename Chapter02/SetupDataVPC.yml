@@ -92,7 +92,7 @@ Resources:
       VpcId: !Ref LnDataVPC
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-database-subnet-rt-a'
+          Value: !Sub '${AWS::StackName}-database-subnet-rt'
   
   # Make subnet association with route table.
   LnAssociatePublicSubnetAWithRouteTableA:
@@ -112,8 +112,8 @@ Outputs:
     Description: RDS instance endpoint.
     Value: !Sub '${LnRDSMySQLMasterDB.Endpoint.Address}'
   AccountID:
-    Description: Application VPC Account ID.
+    Description: Database VPC Account ID.
     Value: !Sub '${AWS::AccountId}'
-  ApplicationVPCID:
-    Description: Data VPC ID.
+  DatabaseVPCID:
+    Description: Database VPC ID.
     Value: !Sub '${LnDataVPC}'
