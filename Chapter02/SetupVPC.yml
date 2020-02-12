@@ -163,7 +163,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-private-rt-webserver-b'
-  # Add IGW to route to toure tables public traffic
+  # Add IGW to route to our tables public traffic
   LnAddIGWRoutingRuleA:
     Type: AWS::EC2::Route
     Properties:
