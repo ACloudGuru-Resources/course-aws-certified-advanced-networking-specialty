@@ -256,22 +256,31 @@ Resources:
       AWS::CloudFormation::Init:
         configSets: 
           InstallAndConfigure:
-            - "config"
-        config: 
+            - "install_dependecies"
+            - "get_html"
+            - "create_landing_page"
+        install_dependecies: 
           packages: 
             yum: 
               httpd: []
-          files:
-              "/var/www/html/index.html":
-                content: "<html><body><h1><center> Congrats on successfully setting up the hands-on lab! Keep being awesome! </center></h1></body></html>"
-                mode: "000644"
-                owner: "root"
-                group: "root"
           services: 
             sysvinit: 
               httpd: 
                 enabled: true
                 ensureRunning: true
+          commands:
+            test:
+              command: yum install git -y
+        get_html:
+          commands:
+            test:
+              command: git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty
+              cwd: /home/ec2-user
+        create_landing_page: 
+          commands: 
+            test: 
+              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
+              cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
   LnEC2InstanceWS2:
     Type: AWS::EC2::Instance
     DependsOn:
@@ -305,22 +314,31 @@ Resources:
       AWS::CloudFormation::Init:
         configSets: 
           InstallAndConfigure:
-            - "config"
-        config: 
+            - "install_dependecies"
+            - "get_html"
+            - "create_landing_page"
+        install_dependecies: 
           packages: 
             yum: 
               httpd: []
-          files:
-              "/var/www/html/index.html":
-                content: "<html><body><h1><center> Congrats on successfully setting up the hands-on lab! Keep being awesome! </center></h1></body></html>"
-                mode: "000644"
-                owner: "root"
-                group: "root"
           services: 
             sysvinit: 
               httpd: 
                 enabled: true
                 ensureRunning: true
+          commands:
+            test:
+              command: yum install git -y
+        get_html:
+          commands:
+            test:
+              command: git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty
+              cwd: /home/ec2-user
+        create_landing_page: 
+          commands: 
+            test: 
+              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
+              cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
   
   LnApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
