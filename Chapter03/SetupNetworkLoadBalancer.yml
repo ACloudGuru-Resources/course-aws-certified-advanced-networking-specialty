@@ -13,18 +13,18 @@ Resources:
   LnCustomVPC:
     Type: AWS::EC2::VPC
     Properties: 
-      CidrBlock: '10.0.0.0/16'
+      CidrBlock: '11.0.0.0/16'
       EnableDnsHostnames: true
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-application-vpc-acg'
+          Value: !Sub '${AWS::StackName}-network-vpc-acg'
   
   # Create each of the subnet
   LnPublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '10.0.0.0/24'
+      CidrBlock: '11.0.0.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 0, !GetAZs ]
       Tags:
@@ -34,7 +34,7 @@ Resources:
   LnPublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '10.0.8.0/24'
+      CidrBlock: '11.0.8.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 1, !GetAZs ]
       Tags:
@@ -44,7 +44,7 @@ Resources:
   LnPrivateWebserverSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '10.0.1.0/24'
+      CidrBlock: '11.0.1.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 0, !GetAZs ]
       Tags:
@@ -54,7 +54,7 @@ Resources:
   LnPrivateWebserverSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '10.0.9.0/24'
+      CidrBlock: '11.0.9.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 1, !GetAZs ]
       Tags:
@@ -63,10 +63,10 @@ Resources:
       VpcId: !Ref LnCustomVPC
 
   # Create each of the security groups
-  LnSecurityGroupForALB:
+  LnSecurityGroupForNLB:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security Group created with CF template for LnSecurityGroupForALB.
+      GroupDescription: Security Group created with CF template for LnSecurityGroupForNLB.
       VpcId : !Ref LnCustomVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
@@ -75,9 +75,9 @@ Resources:
         CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-application-load-balancer-sg'
+          Value: !Sub '${AWS::StackName}-network-load-balancer-sg'
         - Key: Description
-          Value: !Sub 'Security Group created for Application Load Balancer with ${AWS::StackName}.'
+          Value: !Sub 'Security Group created for Classic Load Balancer with ${AWS::StackName}.'
   LnSecurityGroupWebservers:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -87,7 +87,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: 80
         ToPort: 80
-        SourceSecurityGroupId: !Ref LnSecurityGroupForALB
+        CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-webserver-sg'
@@ -279,7 +279,7 @@ Resources:
         create_landing_page: 
           commands: 
             test: 
-              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
+              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
   LnEC2InstanceWS2:
     Type: AWS::EC2::Instance
@@ -337,30 +337,30 @@ Resources:
         create_landing_page: 
           commands: 
             test: 
-              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
+              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
   
-  LnApplicationLoadBalancer:
+  LnNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: advnetspec-lab-alb
-      Type: application
+      Name: advnetspec-lab-nlb
+      Type: network
       Scheme: internet-facing
       IpAddressType: ipv4
-      SecurityGroups: 
-        - !Ref LnSecurityGroupForALB
       Subnets: 
         - !Ref LnPublicSubnetA
         - !Ref LnPublicSubnetB
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'application', 'load', 'balancer' ] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'network', 'load', 'balancer' ] ]
+        - Key: Description
+          Value: !Sub 'Network Load Balancer created with ${AWS::StackName}.'
 
   LnTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Port: 80
-      Protocol: HTTP
+      Protocol: TCP
       Targets:
         - Id: !Ref LnEC2InstanceWS1
         - Id: !Ref LnEC2InstanceWS2
@@ -375,11 +375,11 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref LnTargetGroup
-      LoadBalancerArn: !Ref LnApplicationLoadBalancer
+      LoadBalancerArn: !Ref LnNetworkLoadBalancer
       Port: 80
-      Protocol: HTTP
+      Protocol: TCP
 
 Outputs:
-  ALBLink:
-    Description: Public link to Application Load Balancer.
-    Value: !Sub 'http://${LnApplicationLoadBalancer.DNSName}'
+  NLBLink:
+    Description: Public link to Network Load Balancer.
+    Value: !Sub 'http://${LnNetworkLoadBalancer.DNSName}'
