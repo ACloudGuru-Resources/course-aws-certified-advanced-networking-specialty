@@ -337,7 +337,7 @@ Resources:
         create_landing_page: 
           commands: 
             test: 
-              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
+              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
   LnEC2InstanceWS1V2:
     Type: AWS::EC2::Instance
@@ -453,5 +453,5 @@ Resources:
         create_landing_page: 
           commands: 
             test: 
-              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
+              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty

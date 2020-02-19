@@ -1,3 +1,4 @@
+# Used for easy route, creates Part 1 entirely.
 Mappings:
   RegionMap:
     us-east-1:
@@ -63,10 +64,10 @@ Resources:
       VpcId: !Ref LnCustomVPC
 
   # Create each of the security groups
-  LnSecurityGroupFor:
+  LnSecurityGroupForALB:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security Group created with CF template for LnSecurityGroupFor.
+      GroupDescription: Security Group created with CF template for LnSecurityGroupForALB.
       VpcId : !Ref LnCustomVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
@@ -87,7 +88,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: 80
         ToPort: 80
-        SourceSecurityGroupId: !Ref LnSecurityGroupFor
+        SourceSecurityGroupId: !Ref LnSecurityGroupForALB
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-webserver-sg'
@@ -223,7 +224,7 @@ Resources:
       SubnetId: !Ref LnPrivateWebserverSubnetB
 
   # Start creating Infrastructure
-  LnEC2InstanceWS1:
+  LnEC2InstanceWS1V1:
     Type: AWS::EC2::Instance
     DependsOn:
       - LnCreateNatGatewayA
@@ -237,7 +238,7 @@ Resources:
         - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1'] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1', 'v1'] ]
       SecurityGroupIds:
         - !Ref LnSecurityGroupWebservers
       SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetA] ]
@@ -248,7 +249,7 @@ Resources:
             "yum update -y\n",
             "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
             !Sub "--stack ${AWS::StackName} ",
-            "--resource LnEC2InstanceWS1 ",
+            "--resource LnEC2InstanceWS1V1 ",
             "--configsets InstallAndConfigure ",
             !Sub "--region ${AWS::Region}",
             "\n"] ]
@@ -281,7 +282,7 @@ Resources:
             test: 
               command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
-  LnEC2InstanceWS2:
+  LnEC2InstanceWS2V1:
     Type: AWS::EC2::Instance
     DependsOn:
       - LnCreateNatGatewayA
@@ -295,7 +296,7 @@ Resources:
         - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2'] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2', 'v1'] ]
       SecurityGroupIds:
         - !Ref LnSecurityGroupWebservers
       SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetB] ]
@@ -306,7 +307,7 @@ Resources:
             "yum update -y\n",
             "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
             !Sub "--stack ${AWS::StackName} ",
-            "--resource LnEC2InstanceWS2 ",
+            "--resource LnEC2InstanceWS2V1 ",
             "--configsets InstallAndConfigure ",
             !Sub "--region ${AWS::Region}",
             "\n"] ]
@@ -339,47 +340,248 @@ Resources:
             test: 
               command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
+  LnEC2InstanceWS1V2:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - LnCreateNatGatewayA
+      - LnAttachIGWtoVPC
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1', 'v2'] ]
+      SecurityGroupIds:
+        - !Ref LnSecurityGroupWebservers
+      SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetA] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS1V2 ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "install_dependecies"
+            - "get_html"
+            - "create_landing_page"
+        install_dependecies: 
+          packages: 
+            yum: 
+              httpd: []
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+          commands:
+            test:
+              command: yum install git -y
+        get_html:
+          commands:
+            test:
+              command: git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty
+              cwd: /home/ec2-user
+        create_landing_page: 
+          commands: 
+            test: 
+              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
+              cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
+  LnEC2InstanceWS2V2:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - LnCreateNatGatewayA
+      - LnAttachIGWtoVPC
+    Properties:
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2', 'v2'] ]
+      SecurityGroupIds:
+        - !Ref LnSecurityGroupWebservers
+      SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetB] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS2V2 ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "install_dependecies"
+            - "get_html"
+            - "create_landing_page"
+        install_dependecies: 
+          packages: 
+            yum: 
+              httpd: []
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+          commands:
+            test:
+              command: yum install git -y
+        get_html:
+          commands:
+            test:
+              command: git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty
+              cwd: /home/ec2-user
+        create_landing_page: 
+          commands: 
+            test: 
+              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
+              cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
   
-  LnApplicationLoadBalancer:
+  LnApplicationLoadBalancerV1:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: advnetspec-lab-alb
+      Name: advnetspec-lab-alb-v1
       Type: application
       Scheme: internet-facing
       IpAddressType: ipv4
       SecurityGroups: 
-        - !Ref LnSecurityGroupFor
+        - !Ref LnSecurityGroupForALB
       Subnets: 
         - !Ref LnPublicSubnetA
         - !Ref LnPublicSubnetB
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'application', 'load', 'balancer' ] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'application', 'load', 'balancer', 'v1' ] ]
 
-  LnTargetGroup:
+  LnTargetGroupV1:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Port: 80
       Protocol: HTTP
       Targets:
-        - Id: !Ref LnEC2InstanceWS1
-        - Id: !Ref LnEC2InstanceWS2
+        - Id: !Ref LnEC2InstanceWS1V1
+        - Id: !Ref LnEC2InstanceWS2V1
       VpcId: !Ref LnCustomVPC
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'target-group' ] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'target-group', 'v1'] ]
 
-  LnListener:
+  LnListenerV1:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref LnTargetGroup
-      LoadBalancerArn: !Ref LnApplicationLoadBalancer
+          TargetGroupArn: !Ref LnTargetGroupV1
+      LoadBalancerArn: !Ref LnApplicationLoadBalancerV1
       Port: 80
       Protocol: HTTP
+  
+  LnApplicationLoadBalancerV2:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: advnetspec-lab-alb-v2
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      SecurityGroups: 
+        - !Ref LnSecurityGroupForALB
+      Subnets: 
+        - !Ref LnPublicSubnetA
+        - !Ref LnPublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'application', 'load', 'balancer', 'v2' ] ]
+
+  LnTargetGroupV2:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      Targets:
+        - Id: !Ref LnEC2InstanceWS1V2
+        - Id: !Ref LnEC2InstanceWS2V2
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'target-group', 'v2'] ]
+
+  LnListenerV2:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref LnTargetGroupV2
+      LoadBalancerArn: !Ref LnApplicationLoadBalancerV2
+      Port: 80
+      Protocol: HTTP
+  
+  LnListenerRuleRedirectToV2:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: redirect
+          RedirectConfig:
+            Host: !Sub '${LnApplicationLoadBalancerV2.DNSName}'
+            StatusCode: HTTP_302
+            Protocol: HTTP
+            Port: 80
+            Path: /
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values: 
+              - /v2
+      ListenerArn: !Ref LnListenerV1
+      Priority: 1
+  
+  LnListenerRuleRedirectToV1:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: redirect
+          RedirectConfig:
+            Host: !Sub '${LnApplicationLoadBalancerV1.DNSName}'
+            StatusCode: HTTP_302
+            Protocol: HTTP
+            Port: 80
+            Path: /
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values: 
+              - /v1
+      ListenerArn: !Ref LnListenerV2
+      Priority: 1
 
 Outputs:
-  ALBLink:
-    Description: Public link to Application Load Balancer.
-    Value: !Sub 'http://${LnApplicationLoadBalancer.DNSName}'
+  ALBLinkVersion1:
+    Description: Public link to Application Load Balancer for Version 1 (V1).
+    Value: !Sub 'http://${LnApplicationLoadBalancerV1.DNSName}'
+
+  ALBLinkVersion1Redirected:
+    Description: Public link to Application Load Balancer for Version 2 (redirected by V1).
+    Value: !Sub 'http://${LnApplicationLoadBalancerV1.DNSName}/v2'
+
+  ALBLinkVersion2Redirected:
+    Description: Public link to Application Load Balancer for Version 1 (redirected by V2).
+    Value: !Sub 'http://${LnApplicationLoadBalancerV2.DNSName}/v1'
