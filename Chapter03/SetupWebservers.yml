@@ -13,18 +13,18 @@ Resources:
   LnCustomVPC:
     Type: AWS::EC2::VPC
     Properties: 
-      CidrBlock: '11.0.0.0/16'
+      CidrBlock: '10.0.0.0/16'
       EnableDnsHostnames: true
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-network-vpc-acg'
+          Value: !Sub '${AWS::StackName}-application-vpc-acg'
   
   # Create each of the subnet
   LnPublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '11.0.0.0/24'
+      CidrBlock: '10.0.0.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 0, !GetAZs ]
       Tags:
@@ -34,7 +34,7 @@ Resources:
   LnPublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '11.0.8.0/24'
+      CidrBlock: '10.0.8.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 1, !GetAZs ]
       Tags:
@@ -44,7 +44,7 @@ Resources:
   LnPrivateWebserverSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '11.0.1.0/24'
+      CidrBlock: '10.0.1.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 0, !GetAZs ]
       Tags:
@@ -54,7 +54,7 @@ Resources:
   LnPrivateWebserverSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: '11.0.9.0/24'
+      CidrBlock: '10.0.9.0/24'
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 1, !GetAZs ]
       Tags:
@@ -62,11 +62,11 @@ Resources:
           Value: !Sub '${AWS::StackName}-private-subnet-webserver-b'
       VpcId: !Ref LnCustomVPC
 
-  # Creation of single SG - NLB is a pass through
-  LnSecurityGroupWebservers:
+  # Create each of the security groups
+  LnSecurityGroupForALB:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub 'Security Group created with CF template for with ${AWS::StackName}'
+      GroupDescription: Security Group created with CF template for Application Load Balancer.
       VpcId : !Ref LnCustomVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
@@ -75,9 +75,24 @@ Resources:
         CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
+          Value: !Sub '${AWS::StackName}-application-load-balancer-sg'
+        - Key: Description
+          Value: !Sub 'Security Group created for Application Load Balancer with ${AWS::StackName}.'
+  LnSecurityGroupWebservers:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security Group created with CF template for web servers.'
+      VpcId : !Ref LnCustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref LnSecurityGroupForALB
+      Tags:
+        - Key: Name
           Value: !Sub '${AWS::StackName}-webserver-sg'
         - Key: Description
-          Value: !Sub 'Security Group created for Webservers with ${AWS::StackName}.'
+          Value: !Sub 'Security Group created for web servers with ${AWS::StackName}.'
 
   # Create Internet gateway
   LnInternetGateway:
@@ -208,7 +223,7 @@ Resources:
       SubnetId: !Ref LnPrivateWebserverSubnetB
 
   # Start creating Infrastructure
-  LnEC2InstanceWS1:
+  LnEC2InstanceWS1V1:
     Type: AWS::EC2::Instance
     DependsOn:
       - LnCreateNatGatewayA
@@ -222,7 +237,7 @@ Resources:
         - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1'] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1', 'v1'] ]
       SecurityGroupIds:
         - !Ref LnSecurityGroupWebservers
       SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetA] ]
@@ -233,7 +248,7 @@ Resources:
             "yum update -y\n",
             "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
             !Sub "--stack ${AWS::StackName} ",
-            "--resource LnEC2InstanceWS1 ",
+            "--resource LnEC2InstanceWS1V1 ",
             "--configsets InstallAndConfigure ",
             !Sub "--region ${AWS::Region}",
             "\n"] ]
@@ -264,9 +279,9 @@ Resources:
         create_landing_page: 
           commands: 
             test: 
-              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
+              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
-  LnEC2InstanceWS2:
+  LnEC2InstanceWS2V1:
     Type: AWS::EC2::Instance
     DependsOn:
       - LnCreateNatGatewayA
@@ -280,7 +295,7 @@ Resources:
         - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2'] ]
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2', 'v1'] ]
       SecurityGroupIds:
         - !Ref LnSecurityGroupWebservers
       SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetB] ]
@@ -291,7 +306,7 @@ Resources:
             "yum update -y\n",
             "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
             !Sub "--stack ${AWS::StackName} ",
-            "--resource LnEC2InstanceWS2 ",
+            "--resource LnEC2InstanceWS2V1 ",
             "--configsets InstallAndConfigure ",
             !Sub "--region ${AWS::Region}",
             "\n"] ]
@@ -324,47 +339,119 @@ Resources:
             test: 
               command: cp -r -n ./Chapter03/html/green/* /var/www/html/
               cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
-  
-  LnNetworkLoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  LnEC2InstanceWS1V2:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - LnCreateNatGatewayA
+      - LnAttachIGWtoVPC
     Properties:
-      Name: advnetspec-lab-nlb
-      Type: network
-      Scheme: internet-facing
-      IpAddressType: ipv4
-      Subnets: 
-        - !Ref LnPublicSubnetA
-        - !Ref LnPublicSubnetB
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'network', 'load', 'balancer' ] ]
-        - Key: Description
-          Value: !Sub 'Network Load Balancer created with ${AWS::StackName}.'
-
-  LnTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '1', 'v2'] ]
+      SecurityGroupIds:
+        - !Ref LnSecurityGroupWebservers
+      SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetA] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS1V2 ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "install_dependecies"
+            - "get_html"
+            - "create_landing_page"
+        install_dependecies: 
+          packages: 
+            yum: 
+              httpd: []
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+          commands:
+            test:
+              command: yum install git -y
+        get_html:
+          commands:
+            test:
+              command: git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty
+              cwd: /home/ec2-user
+        create_landing_page: 
+          commands: 
+            test: 
+              command: cp -r -n ./Chapter03/html/green/* /var/www/html/
+              cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty
+  LnEC2InstanceWS2V2:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - LnCreateNatGatewayA
+      - LnAttachIGWtoVPC
     Properties:
-      Port: 80
-      Protocol: TCP
-      Targets:
-        - Id: !Ref LnEC2InstanceWS1
-        - Id: !Ref LnEC2InstanceWS2
-      VpcId: !Ref LnCustomVPC
+      InstanceType: t2.micro
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - !Ref AWS::Region
+        - AMI
       Tags:
         - Key: Name
-          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'target-group' ] ]
-
-  LnListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref LnTargetGroup
-      LoadBalancerArn: !Ref LnNetworkLoadBalancer
-      Port: 80
-      Protocol: TCP
-
-Outputs:
-  NLBLink:
-    Description: Public link to Network Load Balancer.
-    Value: !Sub 'http://${LnNetworkLoadBalancer.DNSName}'
+          Value: !Join [ '-', [!Sub '${AWS::StackName}', 'app-server', 'instance', '2', 'v2'] ]
+      SecurityGroupIds:
+        - !Ref LnSecurityGroupWebservers
+      SubnetId: !Join [ ',', [!Ref LnPrivateWebserverSubnetB] ]
+      UserData:
+        Fn::Base64:
+          !Join [ "", [
+            "#!/bin/bash -xe\n",
+            "yum update -y\n",
+            "sudo /opt/aws/bin/cfn-init -v ", #use cfn-init to install packages in cloudformation init
+            !Sub "--stack ${AWS::StackName} ",
+            "--resource LnEC2InstanceWS2V2 ",
+            "--configsets InstallAndConfigure ",
+            !Sub "--region ${AWS::Region}",
+            "\n"] ]
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets: 
+          InstallAndConfigure:
+            - "install_dependecies"
+            - "get_html"
+            - "create_landing_page"
+        install_dependecies: 
+          packages: 
+            yum: 
+              httpd: []
+          services: 
+            sysvinit: 
+              httpd: 
+                enabled: true
+                ensureRunning: true
+          commands:
+            test:
+              command: yum install git -y
+        get_html:
+          commands:
+            test:
+              command: git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty
+              cwd: /home/ec2-user
+        create_landing_page: 
+          commands: 
+            test: 
+              command: cp -r -n ./Chapter03/html/blue/* /var/www/html/
+              cwd: /home/ec2-user/course-aws-certified-advanced-networking-specialty

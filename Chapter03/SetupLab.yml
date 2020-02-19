@@ -63,10 +63,10 @@ Resources:
       VpcId: !Ref LnCustomVPC
 
   # Create each of the security groups
-  LnSecurityGroupForALB:
+  LnSecurityGroupFor:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security Group created with CF template for LnSecurityGroupForALB.
+      GroupDescription: Security Group created with CF template for LnSecurityGroupFor.
       VpcId : !Ref LnCustomVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
@@ -87,7 +87,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: 80
         ToPort: 80
-        SourceSecurityGroupId: !Ref LnSecurityGroupForALB
+        SourceSecurityGroupId: !Ref LnSecurityGroupFor
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-webserver-sg'
@@ -348,7 +348,7 @@ Resources:
       Scheme: internet-facing
       IpAddressType: ipv4
       SecurityGroups: 
-        - !Ref LnSecurityGroupForALB
+        - !Ref LnSecurityGroupFor
       Subnets: 
         - !Ref LnPublicSubnetA
         - !Ref LnPublicSubnetB
