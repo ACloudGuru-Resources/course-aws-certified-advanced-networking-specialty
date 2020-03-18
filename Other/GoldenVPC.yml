@@ -1,0 +1,182 @@
+# Only required for easy path.
+Resources:
+  # Create the VPC
+  LnCustomVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-application-vpc-acg'
+  
+  # Create each of the subnet
+  LnPublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt LnCustomVPC.CidrBlock, 10, 8 ]]
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-subnet-a'
+      VpcId: !Ref LnCustomVPC
+  LnPublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [ 8, !Cidr [ !GetAtt LnCustomVPC.CidrBlock, 10, 8 ]]
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-subnet-b'
+      VpcId: !Ref LnCustomVPC
+  LnPrivateWebserverSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt LnCustomVPC.CidrBlock, 10, 8 ]]
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-subnet-webserver-a'
+      VpcId: !Ref LnCustomVPC
+  LnPrivateWebserverSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Select [ 9, !Cidr [ !GetAtt LnCustomVPC.CidrBlock, 10, 8 ]]
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-subnet-webserver-b'
+      VpcId: !Ref LnCustomVPC
+
+ # Create Internet gateway
+  LnInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-internet-gateway'
+  
+  # Attach IGW
+  LnAttachIGWtoVPC:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref LnInternetGateway
+      VpcId: !Ref LnCustomVPC
+  
+  # Create Elastic IP addresses
+  LnElasticIPForNatA:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EIP-NAT-gateway-a'
+  LnElasticIPForNatB:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EIP-NAT-gateway-b'
+
+  # Create NAT Gateways
+  LnCreateNatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt LnElasticIPForNatA.AllocationId
+      SubnetId: !Ref LnPublicSubnetA
+      Tags: 
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NAT-gateway-a'
+  
+  # Create all the routing tables
+  LnPublicRouteTableCLBA:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt-a'
+  LnPublicRouteTableCLBB:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-rt-b'
+  LnPrivateRouteTableWebserverA:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt-webserver-a'
+  LnPrivateRouteTableWebserverB:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref LnCustomVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-private-rt-webserver-b'
+  # Add IGW to route to our tables public traffic
+  LnAddIGWRoutingRuleA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPublicRouteTableCLBA
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+  LnAddIGWInternetRuleB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPublicRouteTableCLBB
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref LnInternetGateway
+  
+  # Add NAT gateway routes to route tables
+  LnAddNATRoutingRuleWebserverA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPrivateRouteTableWebserverA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref LnCreateNatGatewayA
+  LnAddNATRoutingRuleWebserverB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref LnPrivateRouteTableWebserverB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref LnCreateNatGatewayA
+
+  # Make subnet association with route tables
+  LnAssociatePublicSubnetAWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPublicRouteTableCLBA
+      SubnetId: !Ref LnPublicSubnetA
+  LnAssociatePublicSubnetBWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPublicRouteTableCLBB
+      SubnetId: !Ref LnPublicSubnetB
+  LnAssociatePrivateWebserverASubnetWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPrivateRouteTableWebserverA
+      SubnetId: !Ref LnPrivateWebserverSubnetA
+  LnAssociatePrivateWebserverBSubnetWithRouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref LnPrivateRouteTableWebserverB
+      SubnetId: !Ref LnPrivateWebserverSubnetB
+
+Outputs:
+  AccountID:
+    Description: Application VPC Account ID.
+    Value: !Sub '${AWS::AccountId}'
+  ApplicationVPCID:
+    Description: Application VPC ID.
+    Value: !Sub '${LnCustomVPC}'

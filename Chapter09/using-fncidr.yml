@@ -1,0 +1,21 @@
+Resources:
+  LnCustomVPC:
+      Type: AWS::EC2::VPC
+      Properties: 
+        CidrBlock: '10.0.0.0/16'
+  LnSubnet1:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: !Select [ 0, !Cidr [ '10.0.0.0/16', 6, 8 ]]
+        VpcId: !Ref LnCustomVPC
+  LnSubnet2:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: !Select [ 1, !Cidr [ '10.0.0.0/16', 6, 8 ]]
+        VpcId: !Ref LnCustomVPC
+  LnSubnet3:
+      Type: AWS::EC2::Subnet
+      Properties:
+        CidrBlock: !Select [ 2, !Cidr [ '10.0.0.0/16', 6, 8 ]]
+        VpcId: !Ref LnCustomVPC
+      

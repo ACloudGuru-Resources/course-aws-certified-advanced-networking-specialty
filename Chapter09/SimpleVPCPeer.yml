@@ -1,0 +1,20 @@
+Resources:
+  LnCustomVPC1:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: '10.0.0.0/16'
+  LnCustomVPC2:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: '192.168.0.0/16'
+  LnPeeringConnection:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties: 
+      PeerOwnerId: 442771530490
+      PeerRoleArn: arn:aws:iam::880898370811:role/create-role-peerRole-X3ZNCOH3368Z
+      PeerVpcId: !Ref LnCustomVPC2
+      VpcId: !Ref LnCustomVPC1
+
+
+  
+  
