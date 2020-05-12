@@ -153,10 +153,10 @@ Resources:
         Protocol: HTTP
       HealthCheck:
         Target: HTTP:80/
-        HealthyThreshold: '3'
-        UnhealthyThreshold: '5'
-        Interval: '30'
-        Timeout: '5'
+        HealthyThreshold: '2'
+        UnhealthyThreshold: '2'
+        Interval: '5'
+        Timeout: '2'
       CrossZone: true
       LoadBalancerName: advnetspec-lab-clb
       SecurityGroups: 
