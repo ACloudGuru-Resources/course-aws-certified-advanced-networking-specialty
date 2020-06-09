@@ -1,0 +1,146 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+      
+# This template creates a VPC named "OnPrem" with a single, public subnet
+# and a Windows 2019 Server configured as a VPN Server.
+# An EC2 Key Pair must be created in the target region before running this template
+
+
+Parameters:
+  PrivateKeyName: 
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: EC-NC1
+    Description: The name of the private key file to use for SSH/RDP access to the instances.
+
+  InstanceTypeParameter: 
+    Type: String
+    Default: "t2.micro"
+    AllowedValues: ["t2.micro", "t3.small", "t3.medium"]
+    Description: "Select the desired instance type."
+
+  Win2019AMIID: # retreived from the SSM Parameter Store in the current region
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2019-English-Full-Base
+
+
+Resources:
+
+###### Network ######
+
+  # First, A VPC:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+      - Key: Name
+        Value: OnPremNet
+        
+  # Our VPC will need internet access:      
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Single Public Subnet
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 192.168.0.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list        
+      Tags:
+      - Key: Name
+        Value: OnPremNetPubA
+
+        
+      
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PublicRT
+
+  PublicRoute:   
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable  
+
+  # Security Group for the VPN server.  Allow RDP from anywhere, to be attatched to EC2 instance later
+  RDPSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: AttachGateway
+    Properties:
+      GroupDescription: Security Group for VPN Server
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: RDPOpen
+      - Key: ResourceGroup
+        Value: CloudFormationResource
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '3389'
+        ToPort: '3389'
+        CidrIp: 0.0.0.0/0    
+
+###### EC2 Infrastructure ######        
+
+  VPNServerInstance:
+      Type: AWS::EC2::Instance
+      Properties:
+        InstanceType: !Ref InstanceTypeParameter
+        ImageId: !Ref Win2019AMIID
+        KeyName: !Ref PrivateKeyName
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            DeleteOnTermination: true
+            SubnetId: !Ref PublicSubnet
+            GroupSet:
+              - !Ref RDPSecurityGroup
+        SourceDestCheck: false
+        Tags:
+          - Key: Name
+            Value: 2019 VPN Server
+        UserData:
+          Fn::Base64: !Sub |
+            <powershell>
+
+            # Disable Internet Explorer Enhanced Security Configuration for Administrators
+            Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}" -Name "IsInstalled" -Value 0 -Force
+            Stop-Process -Name iexplore -ErrorAction SilentlyContinue
+
+            # Begin configuration for VPN services
+            Set-NetAdapterAdvancedProperty -DisplayName "IPv4 Checksum Offload" -DisplayValue "Disabled"
+            Set-NetAdapterAdvancedProperty -DisplayName "TCP Checksum Offload (IPv4)" -DisplayValue "Disabled"
+            Set-NetAdapterAdvancedProperty -DisplayName "UDP Checksum Offload (IPv4)" -DisplayValue "Disabled"
+
+            Invoke-WebRequest https://steveatacg.s3-us-west-1.amazonaws.com/advnetspec/Win2019VPNServerConfig.xml -OutFile c:\config.xml
+
+            Install-WindowsFeature -ConfigurationFilePath c:\config.xml -computername $env:COMPUTERNAME -Restart
+
+            Install-RemoteAccess -VpnType VpnS2S # doing this on 2019 (and 2016 apparenlty) restricts RRAS management to PS tools.  This seems to have no impact on AWS configuration steps
+
+            </powershell>
+          
+
+    

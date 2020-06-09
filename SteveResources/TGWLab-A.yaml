@@ -1,0 +1,260 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+      
+# This template creates three VPCs:
+#  VPC1, with a public subnet and an SSH accessible AmaLinux2 EC2 instance
+#  VPC2, with a private subnet and a ICMP ping accessible AmaLinux2 EC2 instance
+#  VPC3, with a private subnet and a ICMP ping accessible AmaLinux2 EC2 instance
+# An EC2 Key Pair must be created in the target region before running this template
+
+Parameters:
+  PrivateKeyName: 
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the private key file to use for SSH/RDP access to the instances.
+
+  AmazonLinuxAMIID: # retreived from the SSM Parameter Store in the current region
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2
+
+
+Resources:
+
+###### VPC1 ######
+  VPC1:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+      - Key: Name
+        Value: VPC1
+        
+  # Our VPC will need internet access:      
+  InternetGateway1:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC1
+
+  AttachGateway1:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC1
+      InternetGatewayId: !Ref InternetGateway1
+
+  # Single Public Subnet
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC1
+      CidrBlock: 10.1.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list        
+      Tags:
+      - Key: Name
+        Value: VPC1-PublicSub
+
+  PublicRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC1
+      Tags:
+      - Key: Name
+        Value: VPC1-PublicRT
+
+  PublicRoute1:   
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway1
+    Properties:
+      RouteTableId: !Ref PublicRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway1
+
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable1
+
+  # Security Group for the VPC1 Ping Tester instance.  Allow SSH from anywhere.  To be attatched to EC2 instance later
+  SSHSecurityGroup1:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: AttachGateway1
+    Properties:
+      GroupDescription: VPC1-SSHAccess
+      VpcId: !Ref VPC1
+      Tags:
+      - Key: Name
+        Value: VPC1-SSHAccess
+      - Key: ResourceGroup
+        Value: CloudFormationResource
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 0.0.0.0/0
+
+  PingTestInstance1:
+      Type: AWS::EC2::Instance
+      Properties:
+        InstanceType: t2.micro
+        ImageId: !Ref AmazonLinuxAMIID
+        KeyName: !Ref PrivateKeyName
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            DeleteOnTermination: true
+            SubnetId: !Ref PublicSubnet1
+            GroupSet:
+              - !Ref SSHSecurityGroup1
+        SourceDestCheck: false
+        Tags:
+          - Key: Name
+            Value: VPC1 Ping Tester
+
+###### VPC2 ######
+
+  VPC2:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.2.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+      - Key: Name
+        Value: VPC2
+
+  # Single Private Subnet
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC2
+      CidrBlock: 10.2.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list        
+      Tags:
+      - Key: Name
+        Value: VPC2-PrivateSub
+      
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC2
+      Tags:
+      - Key: Name
+        Value: VPC2-PrivateRT
+
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2 
+
+  # Security Group for the VPC2 Ping Target.  Allow ping from anywhere, to be attatched to EC2 instance later
+  PingTargetSecurityGroup2:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: AttachGateway1
+    Properties:
+      GroupDescription: VPC2-PingAccess
+      VpcId: !Ref VPC2
+      Tags:
+      - Key: Name
+        Value: VPC2-PingAccess
+      - Key: ResourceGroup
+        Value: CloudFormationResource
+      SecurityGroupIngress:
+      - IpProtocol: icmp
+        FromPort: '8'
+        ToPort: '-1'
+        CidrIp: 0.0.0.0/0           
+
+  PingTargetInstance2:
+      Type: AWS::EC2::Instance
+      Properties:
+        InstanceType: t2.micro
+        ImageId: !Ref AmazonLinuxAMIID
+        KeyName: !Ref PrivateKeyName
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: false
+            DeviceIndex: 0
+            DeleteOnTermination: true
+            SubnetId: !Ref PrivateSubnet2
+            GroupSet:
+              - !Ref PingTargetSecurityGroup2
+        SourceDestCheck: false
+        Tags:
+          - Key: Name
+            Value: VPC2 Ping Target
+
+
+
+###### VPC3 ######
+
+  VPC3:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.3.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+      - Key: Name
+        Value: VPC3
+        
+  # Single Private Subnet
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC3
+      CidrBlock: 10.3.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list        
+      Tags:
+      - Key: Name
+        Value: VPC3-PrivateSub
+
+  PrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC3
+      Tags:
+      - Key: Name
+        Value: VPC3-PrivateRT
+
+  PrivateSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable3
+
+  # Security Group for the VPC3 Ping Target.  Allow ping from anywhere, to be attatched to EC2 instance later
+  PingTargetSecurityGroup3:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: AttachGateway1
+    Properties:
+      GroupDescription: VPC3-PingAccess
+      VpcId: !Ref VPC3
+      Tags:
+      - Key: Name
+        Value: VPC3-PingAccess
+      - Key: ResourceGroup
+        Value: CloudFormationResource
+      SecurityGroupIngress:
+      - IpProtocol: icmp
+        FromPort: '8'
+        ToPort: '-1'
+        CidrIp: 0.0.0.0/0           
+         
+
+  PingTargetInstance3:
+      Type: AWS::EC2::Instance
+      Properties:
+        InstanceType: t2.micro
+        ImageId: !Ref AmazonLinuxAMIID
+        KeyName: !Ref PrivateKeyName
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            DeleteOnTermination: true
+            SubnetId: !Ref PrivateSubnet3
+            GroupSet:
+              - !Ref PingTargetSecurityGroup3
+        SourceDestCheck: false
+        Tags:
+          - Key: Name
+            Value: VPC3 Ping Target

@@ -1,0 +1,90 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+      
+# This template creates VPC4, with a private subnet and a ICMP ping accessible AmaLinux2 EC2 instance
+# An EC2 Key Pair must be created in the target region before running this template
+
+Parameters:
+  PrivateKeyName: 
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the private key file to use for SSH/RDP access to the instances.
+
+  AmazonLinuxAMIID: # retreived from the SSM Parameter Store in the current region
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2
+
+
+Resources:
+
+###### VPC4 ######
+
+  VPC4:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.4.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+      - Key: Name
+        Value: VPC4
+
+  # Single Private Subnet
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC4
+      CidrBlock: 10.4.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list        
+      Tags:
+      - Key: Name
+        Value: VPC4-PrivateSub
+      
+  PrivateRouteTable4:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC4
+      Tags:
+      - Key: Name
+        Value: VPC4-PrivateRT
+
+  PrivateSubnetRouteTableAssociation4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet4
+      RouteTableId: !Ref PrivateRouteTable4 
+
+  # Security Group for the VPC4 Ping Target instance.  Allow SSH from anywhere, to be attatched to EC2 instance later
+  PingSecurityGroup4:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: VPC4
+    Properties:
+      GroupDescription: VPC4-PingAccess
+      VpcId: !Ref VPC4
+      Tags:
+      - Key: Name
+        Value: PingOpen
+      - Key: ResourceGroup
+        Value: CloudFormationResource
+      SecurityGroupIngress:
+      - IpProtocol: icmp
+        FromPort: '8'
+        ToPort: '-1'
+        CidrIp: 0.0.0.0/0           
+
+  PingTargetInstance4:
+      Type: AWS::EC2::Instance
+      Properties:
+        InstanceType: t2.micro
+        ImageId: !Ref AmazonLinuxAMIID
+        KeyName: !Ref PrivateKeyName
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: false
+            DeviceIndex: 0
+            DeleteOnTermination: true
+            SubnetId: !Ref PrivateSubnet4
+            GroupSet:
+              - !Ref PingSecurityGroup4
+        SourceDestCheck: false
+        Tags:
+          - Key: Name
+            Value: VPC4 Ping Target

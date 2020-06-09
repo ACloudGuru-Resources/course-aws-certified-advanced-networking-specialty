@@ -1,0 +1,89 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+      
+# This template creates a VPC named "CloudNet1" with a single, private subnet
+# and an AmaLinux EC2 instance as a ping target.
+# An EC2 Key Pair must be created in the target region before running this template
+
+
+Parameters:
+  PrivateKeyName: 
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the private key file to use for SSH/RDP access to the instances.
+
+
+  AmazonLinuxAMIID: # retreived from the SSM Parameter Store in the current region
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-gp2
+
+
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+      - Key: Name
+        Value: CloudNet
+        
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.0.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]     
+      Tags:
+      - Key: Name
+        Value: CloudNetPvtA
+              
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: CloudNetPvt
+
+  PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Security Group for the Ping Target.  Allow any traffic from 192.168.0.0/16
+  AllFromOnPremNet:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for VPN Server
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: AllFromOnPremNet
+      - Key: ResourceGroup
+        Value: CloudFormationResource
+      SecurityGroupIngress:
+      - IpProtocol: -1
+        CidrIp: 192.168.0.0/0    
+
+  PingTargetInstance:
+      Type: AWS::EC2::Instance
+      Properties:
+        InstanceType: t2.micro
+        ImageId: !Ref AmazonLinuxAMIID
+        KeyName: !Ref PrivateKeyName
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            DeleteOnTermination: true
+            SubnetId: !Ref PrivateSubnet
+            GroupSet:
+              - !Ref AllFromOnPremNet
+        SourceDestCheck: false
+        Tags:
+          - Key: Name
+            Value: PingTarget
+          
+
+    
