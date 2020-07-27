@@ -113,14 +113,14 @@ Resources:
   LnElasticIPForNatA:
     Type: AWS::EC2::EIP
     Properties:
-      Domain: VPC
+      Domain: vpc
       Tags: 
         - Key: Name
           Value: !Sub '${AWS::StackName}-EIP-NAT-gateway-a'
   LnElasticIPForNatB:
     Type: AWS::EC2::EIP
     Properties:
-      Domain: VPC
+      Domain: vpc
       Tags: 
         - Key: Name
           Value: !Sub '${AWS::StackName}-EIP-NAT-gateway-b'
