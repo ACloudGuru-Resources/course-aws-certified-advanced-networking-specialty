@@ -1,0 +1,942 @@
+{
+    "Mappings": {
+        "RegionMap": {
+            "us-east-1": {
+                "AMI": "ami-09d069a04349dc3cb"
+            },
+            "us-east-2": {
+                "AMI": "ami-0d542ef84ec55d71c"
+            },
+            "us-west-1": {
+                "AMI": "ami-04bc3da8f14823e88"
+            },
+            "us-west-2": {
+                "AMI": "ami-01460aa81365561fe"
+            }
+        }
+    },
+    "Resources": {
+        "LnCustomVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": "10.0.0.0/16",
+                "EnableDnsHostnames": true,
+                "EnableDnsSupport": true,
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-application-vpc-acg"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnPublicSubnetA": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "CidrBlock": "10.0.0.0/24",
+                "MapPublicIpOnLaunch": false,
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        0,
+                        {
+                            "Fn::GetAZs": null
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-public-subnet-alb-a"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                }
+            }
+        },
+        "LnPublicSubnetB": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "CidrBlock": "10.0.8.0/24",
+                "MapPublicIpOnLaunch": false,
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        1,
+                        {
+                            "Fn::GetAZs": null
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-public-subnet-alb-b"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                }
+            }
+        },
+        "LnPrivateWebserverSubnetA": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "CidrBlock": "10.0.1.0/24",
+                "MapPublicIpOnLaunch": false,
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        0,
+                        {
+                            "Fn::GetAZs": null
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-private-subnet-webserver-a"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                }
+            }
+        },
+        "LnPrivateWebserverSubnetB": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "CidrBlock": "10.0.9.0/24",
+                "MapPublicIpOnLaunch": false,
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        1,
+                        {
+                            "Fn::GetAZs": null
+                        }
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-private-subnet-webserver-b"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                }
+            }
+        },
+        "LnSecurityGroupForALB": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Security Group created with CF template for Application Load Balancer.",
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-application-load-balancer-sg"
+                        }
+                    },
+                    {
+                        "Key": "Description",
+                        "Value": {
+                            "Fn::Sub": "Security Group created for Application Load Balancer with ${AWS::StackName}."
+                        }
+                    }
+                ]
+            }
+        },
+        "LnSecurityGroupWebservers": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": {
+                    "Fn::Sub": "Security Group created with CF template for web servers."
+                },
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "SourceSecurityGroupId": {
+                            "Ref": "LnSecurityGroupForALB"
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-webserver-sg"
+                        }
+                    },
+                    {
+                        "Key": "Description",
+                        "Value": {
+                            "Fn::Sub": "Security Group created for web servers with ${AWS::StackName}."
+                        }
+                    }
+                ]
+            }
+        },
+        "LnInternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-internet-gateway"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnAttachIGWtoVPC": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "InternetGatewayId": {
+                    "Ref": "LnInternetGateway"
+                },
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                }
+            }
+        },
+        "LnElasticIPForNatA": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-EIP-NAT-gateway-a"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnElasticIPForNatB": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-EIP-NAT-gateway-b"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnCreateNatGatewayA": {
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "LnElasticIPForNatA",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "LnPublicSubnetA"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-NAT-gateway-a"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnCreateNatGatewayB": {
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "LnElasticIPForNatB",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "LnPublicSubnetB"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-NAT-gateway-b"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnPublicRouteTableALBA": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-public-rt-a"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnPublicRouteTableALBB": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-public-rt-b"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnPrivateRouteTableWebserverA": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-private-rt-webserver-a"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnPrivateRouteTableWebserverB": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "LnCustomVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Sub": "${AWS::StackName}-private-rt-webserver-b"
+                        }
+                    }
+                ]
+            }
+        },
+        "LnAddIGWRoutingRuleA": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPublicRouteTableALBA"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "LnInternetGateway"
+                }
+            }
+        },
+        "LnAddIGWInternetRuleB": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPublicRouteTableALBB"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "LnInternetGateway"
+                }
+            }
+        },
+        "LnAddNATRoutingRuleWebserverA": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPrivateRouteTableWebserverA"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "LnCreateNatGatewayA"
+                }
+            }
+        },
+        "LnAddNATRoutingRuleWebserverB": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPrivateRouteTableWebserverB"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "LnCreateNatGatewayB"
+                }
+            }
+        },
+        "LnAssociatePublicSubnetAWithRouteTable": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPublicRouteTableALBA"
+                },
+                "SubnetId": {
+                    "Ref": "LnPublicSubnetA"
+                }
+            }
+        },
+        "LnAssociatePublicSubnetBWithRouteTable": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPublicRouteTableALBB"
+                },
+                "SubnetId": {
+                    "Ref": "LnPublicSubnetB"
+                }
+            }
+        },
+        "LnAssociatePrivateWebserverASubnetWithRouteTable": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPrivateRouteTableWebserverA"
+                },
+                "SubnetId": {
+                    "Ref": "LnPrivateWebserverSubnetA"
+                }
+            }
+        },
+        "LnAssociatePrivateWebserverBSubnetWithRouteTable": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "LnPrivateRouteTableWebserverB"
+                },
+                "SubnetId": {
+                    "Ref": "LnPrivateWebserverSubnetB"
+                }
+            }
+        },
+        "LnEC2InstanceWS1V1": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": [
+                "LnCreateNatGatewayA",
+                "LnAttachIGWtoVPC"
+            ],
+            "Properties": {
+                "InstanceType": "t2.micro",
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Fn::Sub": "${AWS::StackName}"
+                                    },
+                                    "app-server",
+                                    "instance",
+                                    "1",
+                                    "v1"
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "LnSecurityGroupWebservers"
+                    }
+                ],
+                "SubnetId": {
+                    "Fn::Join": [
+                        ",",
+                        [
+                            {
+                                "Ref": "LnPrivateWebserverSubnetA"
+                            }
+                        ]
+                    ]
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "yum update -y\n",
+                                "sudo /opt/aws/bin/cfn-init -v ",
+                                {
+                                    "Fn::Sub": "--stack ${AWS::StackName} "
+                                },
+                                "--resource LnEC2InstanceWS1V1 ",
+                                "--configsets InstallAndConfigure ",
+                                {
+                                    "Fn::Sub": "--region ${AWS::Region}"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "InstallAndConfigure": [
+                            "install_dependecies",
+                            "get_html",
+                            "create_landing_page"
+                        ]
+                    },
+                    "install_dependecies": {
+                        "packages": {
+                            "yum": {
+                                "httpd": []
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "httpd": {
+                                    "enabled": true,
+                                    "ensureRunning": true
+                                }
+                            }
+                        },
+                        "commands": {
+                            "test": {
+                                "command": "yum install git -y"
+                            }
+                        }
+                    },
+                    "get_html": {
+                        "commands": {
+                            "test": {
+                                "command": "git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty",
+                                "cwd": "/home/ec2-user"
+                            }
+                        }
+                    },
+                    "create_landing_page": {
+                        "commands": {
+                            "test": {
+                                "command": "cp -r -n ./Chapter03/html/blue/* /var/www/html/",
+                                "cwd": "/home/ec2-user/course-aws-certified-advanced-networking-specialty"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "LnEC2InstanceWS2V1": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": [
+                "LnCreateNatGatewayA",
+                "LnAttachIGWtoVPC"
+            ],
+            "Properties": {
+                "InstanceType": "t2.micro",
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Fn::Sub": "${AWS::StackName}"
+                                    },
+                                    "app-server",
+                                    "instance",
+                                    "2",
+                                    "v1"
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "LnSecurityGroupWebservers"
+                    }
+                ],
+                "SubnetId": {
+                    "Fn::Join": [
+                        ",",
+                        [
+                            {
+                                "Ref": "LnPrivateWebserverSubnetB"
+                            }
+                        ]
+                    ]
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "yum update -y\n",
+                                "sudo /opt/aws/bin/cfn-init -v ",
+                                {
+                                    "Fn::Sub": "--stack ${AWS::StackName} "
+                                },
+                                "--resource LnEC2InstanceWS2V1 ",
+                                "--configsets InstallAndConfigure ",
+                                {
+                                    "Fn::Sub": "--region ${AWS::Region}"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "InstallAndConfigure": [
+                            "install_dependecies",
+                            "get_html",
+                            "create_landing_page"
+                        ]
+                    },
+                    "install_dependecies": {
+                        "packages": {
+                            "yum": {
+                                "httpd": []
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "httpd": {
+                                    "enabled": true,
+                                    "ensureRunning": true
+                                }
+                            }
+                        },
+                        "commands": {
+                            "test": {
+                                "command": "yum install git -y"
+                            }
+                        }
+                    },
+                    "get_html": {
+                        "commands": {
+                            "test": {
+                                "command": "git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty",
+                                "cwd": "/home/ec2-user"
+                            }
+                        }
+                    },
+                    "create_landing_page": {
+                        "commands": {
+                            "test": {
+                                "command": "cp -r -n ./Chapter03/html/blue/* /var/www/html/",
+                                "cwd": "/home/ec2-user/course-aws-certified-advanced-networking-specialty"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "LnEC2InstanceWS1V2": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": [
+                "LnCreateNatGatewayA",
+                "LnAttachIGWtoVPC"
+            ],
+            "Properties": {
+                "InstanceType": "t2.micro",
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Fn::Sub": "${AWS::StackName}"
+                                    },
+                                    "app-server",
+                                    "instance",
+                                    "1",
+                                    "v2"
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "LnSecurityGroupWebservers"
+                    }
+                ],
+                "SubnetId": {
+                    "Fn::Join": [
+                        ",",
+                        [
+                            {
+                                "Ref": "LnPrivateWebserverSubnetA"
+                            }
+                        ]
+                    ]
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "yum update -y\n",
+                                "sudo /opt/aws/bin/cfn-init -v ",
+                                {
+                                    "Fn::Sub": "--stack ${AWS::StackName} "
+                                },
+                                "--resource LnEC2InstanceWS1V2 ",
+                                "--configsets InstallAndConfigure ",
+                                {
+                                    "Fn::Sub": "--region ${AWS::Region}"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "InstallAndConfigure": [
+                            "install_dependecies",
+                            "get_html",
+                            "create_landing_page"
+                        ]
+                    },
+                    "install_dependecies": {
+                        "packages": {
+                            "yum": {
+                                "httpd": []
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "httpd": {
+                                    "enabled": true,
+                                    "ensureRunning": true
+                                }
+                            }
+                        },
+                        "commands": {
+                            "test": {
+                                "command": "yum install git -y"
+                            }
+                        }
+                    },
+                    "get_html": {
+                        "commands": {
+                            "test": {
+                                "command": "git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty",
+                                "cwd": "/home/ec2-user"
+                            }
+                        }
+                    },
+                    "create_landing_page": {
+                        "commands": {
+                            "test": {
+                                "command": "cp -r -n ./Chapter03/html/green/* /var/www/html/",
+                                "cwd": "/home/ec2-user/course-aws-certified-advanced-networking-specialty"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "LnEC2InstanceWS2V2": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": [
+                "LnCreateNatGatewayA",
+                "LnAttachIGWtoVPC"
+            ],
+            "Properties": {
+                "InstanceType": "t2.micro",
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "RegionMap",
+                        {
+                            "Ref": "AWS::Region"
+                        },
+                        "AMI"
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    {
+                                        "Fn::Sub": "${AWS::StackName}"
+                                    },
+                                    "app-server",
+                                    "instance",
+                                    "2",
+                                    "v2"
+                                ]
+                            ]
+                        }
+                    }
+                ],
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "LnSecurityGroupWebservers"
+                    }
+                ],
+                "SubnetId": {
+                    "Fn::Join": [
+                        ",",
+                        [
+                            {
+                                "Ref": "LnPrivateWebserverSubnetB"
+                            }
+                        ]
+                    ]
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "yum update -y\n",
+                                "sudo /opt/aws/bin/cfn-init -v ",
+                                {
+                                    "Fn::Sub": "--stack ${AWS::StackName} "
+                                },
+                                "--resource LnEC2InstanceWS2V2 ",
+                                "--configsets InstallAndConfigure ",
+                                {
+                                    "Fn::Sub": "--region ${AWS::Region}"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "InstallAndConfigure": [
+                            "install_dependecies",
+                            "get_html",
+                            "create_landing_page"
+                        ]
+                    },
+                    "install_dependecies": {
+                        "packages": {
+                            "yum": {
+                                "httpd": []
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "httpd": {
+                                    "enabled": true,
+                                    "ensureRunning": true
+                                }
+                            }
+                        },
+                        "commands": {
+                            "test": {
+                                "command": "yum install git -y"
+                            }
+                        }
+                    },
+                    "get_html": {
+                        "commands": {
+                            "test": {
+                                "command": "git clone https://github.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty",
+                                "cwd": "/home/ec2-user"
+                            }
+                        }
+                    },
+                    "create_landing_page": {
+                        "commands": {
+                            "test": {
+                                "command": "cp -r -n ./Chapter03/html/green/* /var/www/html/",
+                                "cwd": "/home/ec2-user/course-aws-certified-advanced-networking-specialty"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
