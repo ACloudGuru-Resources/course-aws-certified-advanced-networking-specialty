@@ -284,7 +284,7 @@ Resources:
   LnEC2InstanceWS2V1:
     Type: AWS::EC2::Instance
     DependsOn:
-      - LnCreateNatGatewayA
+      - LnCreateNatGatewayB
       - LnAttachIGWtoVPC
     Properties:
       InstanceType: t2.micro
