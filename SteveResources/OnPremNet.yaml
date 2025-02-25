@@ -134,7 +134,7 @@ Resources:
             Set-NetAdapterAdvancedProperty -DisplayName "TCP Checksum Offload (IPv4)" -DisplayValue "Disabled"
             Set-NetAdapterAdvancedProperty -DisplayName "UDP Checksum Offload (IPv4)" -DisplayValue "Disabled"
 
-            Invoke-WebRequest https://steveatacg.s3-us-west-1.amazonaws.com/advnetspec/Win2019VPNServerConfig.xml -OutFile c:\config.xml
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ACloudGuru-Resources/course-aws-certified-advanced-networking-specialty/master/SteveResources/Win2019VPNServerConfig.xml" -OutFile "c:\config.xml"
 
             Install-WindowsFeature -ConfigurationFilePath c:\config.xml -computername $env:COMPUTERNAME -Restart
 
